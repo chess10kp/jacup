@@ -1,0 +1,119 @@
+{
+  "versions": [
+    {
+      "version": "0.37.21",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.21/jac-0.37.21-linux-x86_64",
+          "sha256": "1f4385aca73182f90ca0bf2dd887713df6e0530115e0835dc09e396256a7333d"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.21/jac-0.37.21-linux-aarch64",
+          "sha256": "9f7cc107519243ee5fc16f642606ed79e94ca024f28b269745d208b2d142d692"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.21/jac-0.37.21-macos-aarch64",
+          "sha256": "f828966109cd023748a8e484c2a66795325dee3c646f7416235da86ef561cf72"
+        }
+      ]
+    },
+    {
+      "version": "0.37.19",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.19/jac-0.37.19-linux-x86_64",
+          "sha256": "f78af345060da8bfbc098f2cdd2de57e0073b4183c0bba269b5134afe0418629"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.19/jac-0.37.19-linux-aarch64",
+          "sha256": "c03aaf611647fc8be7b03d8d1cda90701f4c90719021832271b3d88e260ba7e8"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.19/jac-0.37.19-macos-aarch64",
+          "sha256": "3345c60a101ca7afd29b3d7dc46ffc9dc75b655966b42f5eb7de09635ca88fa7"
+        }
+      ]
+    },
+    {
+      "version": "0.37.18",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.18/jac-0.37.18-linux-x86_64",
+          "sha256": "ead9f12e97ae6da638fee7f812e657f21d4d5c3d7605ae698cbe4854411134ee"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.18/jac-0.37.18-linux-aarch64",
+          "sha256": "4f17a90a5b5ec82bb97c3fcf48665a5e3efe6e2268510b6ed60816748113d1ce"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.18/jac-0.37.18-macos-aarch64",
+          "sha256": "020c4e98ba2474e458face216e509deb2b21a3056feec5d63e81de2707ceb42f"
+        }
+      ]
+    },
+    {
+      "version": "0.37.17",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.17/jac-0.37.17-linux-x86_64",
+          "sha256": "ac15d432f8d431c218b3edda1a6724c370bda913e6e34a085da8c6110c52271a"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.17/jac-0.37.17-linux-aarch64",
+          "sha256": "27fe365f6b6d99b7a45988b01deea665b445bd3ea4db0b8ef9827cb681d50955"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.17/jac-0.37.17-macos-aarch64",
+          "sha256": "55854fe52f77a513fb36272c1cd4913e608af5d86961894924c39aadb65c5ed7"
+        }
+      ]
+    },
+    {
+      "version": "0.37.14",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.14/jac-0.37.14-linux-x86_64",
+          "sha256": "de0876eb056962604865ccb17d66969b8a5dfc34e51bd8f177ae95cc004aad45"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.14/jac-0.37.14-linux-aarch64",
+          "sha256": "9e5b2588c66362bb195812f1c33c7e22b75eefc43b9528202cde04562e53ed8e"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.14/jac-0.37.14-macos-aarch64",
+          "sha256": "9517862d5bbc5ec88016f38854a6c7a4cef0089c1261fdac0f5859e0ba52b7d7"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+name: jac-index
+
+# Refreshes index.json from upstream jaseci-labs/jac releases and commits it
+# to the default branch. Consumers point jacup at the raw URL of index.json.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jac-index
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Generate index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/gen_index.py --limit 5 --out index.json
+      - name: Commit index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- index.json; then
+            echo "index unchanged"
+          else
+            git config user.name "jacup-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add index.json
+            git commit -m "chore: refresh jac release index [skip ci]"
+            git push
+          fi

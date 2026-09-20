@@ -1,0 +1,9 @@
+# jac runtime
+.jac/
+__pycache__/
+*.pyc
+
+# build artifacts
+build/
+dist/
+*.spec

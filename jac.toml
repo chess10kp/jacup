@@ -1,0 +1,9 @@
+[project]
+name = "jacup"
+version = "0.1.0"
+description = "Standalone Jac version manager"
+entry-point = "src.main"
+kind = "cli"
+
+[test]
+directory = "tests"

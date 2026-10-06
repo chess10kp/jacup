@@ -1,13 +1,44 @@
-"""Global manager state: config.json with default_version and release_index_url."""
+"""Global manager state: config.json with default_version, release_index_url, and aliases."""
 
 import json;
 import os;
+import re;
 import from src.errors { JacupError }
 import from src.paths { JacupHome, writeTextAtomic }
+import from src.semver { parseVersion }
+
+glob ALIAS_PATTERN: str = r"^[A-Za-z][A-Za-z0-9._-]{0,63}$";
+glob RESERVED_ALIASES: list[str] = ["latest"];
 
 obj JacupConfig {
     has default_version: str | None = None;
     has release_index_url: str | None = None;
+    has aliases: dict[str, str] = {};
+}
+
+def validateAlias(name: str) -> None {
+    if not re.fullmatch(ALIAS_PATTERN, name) {
+        raise JacupError(
+            f"invalid alias '{name}': use 1-64 characters (letters, digits, '.', '_', '-') "
+            "starting with a letter"
+        );
+    }
+    if name in RESERVED_ALIASES {
+        raise JacupError(f"'{name}' is reserved and cannot be used as an alias");
+    }
+    versionLike: bool = False;
+    try {
+        parseVersion(name);
+        versionLike = True;
+    } except JacupError as e {
+        versionLike = False;
+    }
+    if versionLike {
+        raise JacupError(
+            f"invalid alias '{name}': aliases must not look like exact versions so "
+            "'jacup switch <version|alias>' stays unambiguous"
+        );
+    }
 }
 
 def loadConfig(home: JacupHome) -> JacupConfig {
@@ -47,6 +78,30 @@ def loadConfig(home: JacupHome) -> JacupConfig {
         }
         cfg.release_index_url = riu;
     }
+    aliasMap = data.get("aliases");
+    if aliasMap is not None {
+        if not isinstance(aliasMap, dict) {
+            raise JacupError(f"malformed config file {path}: 'aliases' must be a JSON object");
+        }
+        for key in aliasMap {
+            value = aliasMap[key];
+            if not isinstance(value, str) or value == "" {
+                raise JacupError(
+                    f"malformed config file {path}: alias '{key}' must map to a non-empty string"
+                );
+            }
+            try {
+                parseVersion(value);
+            } except JacupError as e {
+                raise JacupError(
+                    f"malformed config file {path}: alias '{key}' maps to '{value}', "
+                    "which is not an exact version"
+                );
+            }
+            validateAlias(key);
+        }
+        cfg.aliases = aliasMap;
+    }
     return cfg;
 }
 
@@ -56,6 +111,7 @@ def saveConfig(home: JacupHome, cfg: JacupConfig) -> None {
         {
             "default_version": cfg.default_version,
             "release_index_url": cfg.release_index_url,
+            "aliases": cfg.aliases,
         },
         indent=2,
         sort_keys=True,

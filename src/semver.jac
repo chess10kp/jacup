@@ -1,7 +1,9 @@
 """Exact semantic versions: MAJOR.MINOR.PATCH[-PRERELEASE].
 
 `jacup` only accepts exact versions. Ranges, `latest`, `v` prefixes, and
-path-like values never parse, so they are rejected at every entry point.
+path-like values never parse, so they are rejected at every version entry
+point; 'install latest' and 'update' resolve the literal 'latest' through the
+release index (releases.latestVersionString) before any version is parsed.
 """
 
 import re;

@@ -281,3 +281,87 @@ test "install pin exec unpin flow via the real cli" {
         shutil.rmtree(work, ignore_errors=True);
     }
 }
+
+test "latest update switch aliases and launcher flow via the real cli" {
+    jacBin = shutil.which("jac");
+    assert jacBin, "jac executable must be on PATH";
+    mainPath: str = os.path.join(repoRoot(), "src", "main.jac");
+
+    home: str = tempfile.mkdtemp(prefix="jacup-it-latest-home-");
+    work: str = tempfile.mkdtemp(prefix="jacup-it-latest-idx-");
+    env = os.environ.copy();
+    env["JACUP_HOME"] = home;
+    env.pop("JACUP_INDEX_URL", None);
+
+    indexUrl: str = writeIndex(
+        os.path.join(work, "idx"),
+        [fixtureEntry("0.9.0", "fakejac-0.9.0.sh"), fixtureEntry("0.9.1", "fakejac-0.9.1.sh")],
+    );
+    shim: str = os.path.join(home, "bin", "jac");
+
+    try {
+        # no command: helpful usage without the word error.
+        r = runCli(jacBin, mainPath, [], env, work);
+        assert r[0] == 2, f"no command rc={r[0]}";
+        assert "usage: jacup" in r[2] and "error" not in r[2], f"no-command output: {r[2]}";
+
+        # install latest picks the highest release and never touches the default.
+        r = runCli(jacBin, mainPath, ["install", "latest", "--index-url", indexUrl], env, work);
+        assert r[0] == 0, f"install latest rc={r[0]} err={r[2]}";
+        assert "latest release is 0.9.1" in r[1] and "installed Jac 0.9.1" in r[1], f"install latest: {r[1]}";
+        assert not os.path.exists(os.path.join(home, "config.json")), "install latest sets no default";
+        assert not os.path.exists(shim), "install latest creates no launcher link";
+
+        # update installs the newest release, defaults to it, and links the launcher.
+        r = runCli(jacBin, mainPath, ["update", "--index-url", indexUrl], env, work);
+        assert r[0] == 0, f"update rc={r[0]} err={r[2]}";
+        assert "default Jac version set to 0.9.1" in r[1], f"update output: {r[1]}";
+        assert "add " + os.path.join(home, "bin") + " to PATH" in r[1], f"PATH hint shown: {r[1]}";
+        assert os.path.islink(shim), f"launcher link created: {shim}";
+        assert os.path.realpath(shim).endswith(os.path.join("versions", "0.9.1", "jac")), "link targets 0.9.1";
+        r = runCli(jacBin, mainPath, ["update", "--index-url", indexUrl], env, work);
+        assert r[0] == 0 and "already the latest version" in r[1], f"idempotent update: {r[1]}";
+
+        # aliases name installed versions and switch accepts them or exact versions.
+        r = runCli(jacBin, mainPath, ["install", "0.9.0", "--index-url", indexUrl], env, work);
+        assert r[0] == 0, f"install 0.9.0 rc={r[0]} err={r[2]}";
+        r = runCli(jacBin, mainPath, ["alias", "stable", "0.9.1"], env, work);
+        assert r[0] == 0, f"alias rc={r[0]} err={r[2]}";
+        r = runCli(jacBin, mainPath, ["aliases"], env, work);
+        assert r[0] == 0 and "stable = 0.9.1" in r[1], f"aliases listing: {r[1]}";
+        r = runCli(jacBin, mainPath, ["switch", "stable"], env, work);
+        assert r[0] == 0 and "default Jac version set to 0.9.1" in r[1], f"switch alias: {r[1]} err={r[2]}";
+        assert os.path.realpath(shim).endswith(os.path.join("versions", "0.9.1", "jac")), "link follows alias switch";
+        r = runCli(jacBin, mainPath, ["switch", "0.9.0"], env, work);
+        assert r[0] == 0, f"switch exact rc={r[0]} err={r[2]}";
+        assert os.path.realpath(shim).endswith(os.path.join("versions", "0.9.0", "jac")), "link repointed to 0.9.0";
+        r = runCli(jacBin, mainPath, ["current"], env, work);
+        assert r[0] == 0 and "0.9.0" in r[1] and "global default" in r[1], f"current after switch: {r[1]}";
+
+        # alias and switch failure paths stay actionable.
+        r = runCli(jacBin, mainPath, ["alias", "ghost", "9.9.9"], env, work);
+        assert r[0] == 2 and "not installed" in r[2], f"alias of missing version rc={r[0]} err={r[2]}";
+        r = runCli(jacBin, mainPath, ["alias", "0.9.1", "0.9.1"], env, work);
+        assert r[0] == 2 and "alias" in r[2], f"version-like alias rc={r[0]} err={r[2]}";
+        r = runCli(jacBin, mainPath, ["switch", "nope"], env, work);
+        assert r[0] == 2 and "neither an exact version nor a defined alias" in r[2], f"unknown switch rc={r[0]} err={r[2]}";
+        r = runCli(jacBin, mainPath, ["unalias", "stable"], env, work);
+        assert r[0] == 0 and "removed alias 'stable'" in r[1], f"unalias: {r[1]}";
+
+        # state stays consistent: default recorded, aliases emptied, bin dir printable.
+        cfgPath: str = os.path.join(home, "config.json");
+        fh = open(cfgPath, "r");
+        try {
+            cfg = json.loads(fh.read());
+        } finally {
+            fh.close();
+        }
+        assert cfg["default_version"] == "0.9.0", f"default intact: {cfg}";
+        assert cfg["aliases"] == {}, f"aliases emptied: {cfg}";
+        r = runCli(jacBin, mainPath, ["bin"], env, work);
+        assert r[0] == 0 and r[1].strip() == os.path.join(home, "bin"), f"bin prints the dir: {r[1]}";
+    } finally {
+        shutil.rmtree(home, ignore_errors=True);
+        shutil.rmtree(work, ignore_errors=True);
+    }
+}

@@ -6,7 +6,7 @@ import os;
 import platform;
 import shutil;
 import tempfile;
-import from src.config { JacupConfig, loadConfig, resolveIndexUrl, saveConfig }
+import from src.config { JacupConfig, loadConfig, resolveIndexUrl, saveConfig, validateAlias }
 import from src.errors { JacupError }
 import from src.install { installVersion, installedVersions, loadMetadata, uninstallVersion }
 import from src.paths { JacupHome, binaryName, writeTextAtomic }
@@ -15,9 +15,20 @@ import from src.releases {
     fetchIndex,
     isValidChecksum,
     currentTarget,
+    latestVersionString,
     sha256File,
+    Target,
 }
-import from src.selection { installedPath, pinFilePath, resolveVersion, unpinProjectVersion }
+import from src.selection {
+    installedPath,
+    pinFilePath,
+    removeAlias,
+    resolveAliasOrVersion,
+    resolveVersion,
+    setDefaultVersion,
+    setAlias,
+    unpinProjectVersion,
+}
 import from src.semver { parseVersion, sortVersionStrings }
 
 def findRepoRoot() -> str {
@@ -91,6 +102,20 @@ def fixtureEntry(version: str, fixture: str) -> dict[str, any] {
                 "arch": "x86_64",
                 "url": "file://" + artifactPath,
                 "sha256": sha256File(artifactPath),
+            }
+        ],
+    };
+}
+
+def plainEntry(osName: str, arch: str, version: str) -> dict[str, any] {
+    return {
+        "version": version,
+        "artifacts": [
+            {
+                "os": osName,
+                "arch": arch,
+                "url": "https://example.test/jac-" + version,
+                "sha256": "a" * 64,
             }
         ],
     };
@@ -561,5 +586,83 @@ test "missing versions produce actionable selection errors" {
         assert raised, "selection with missing install must fail";
     } finally {
         cleanupTmp(base);
+    }
+}
+
+test "latest version picks newest stable with a target artifact" {
+    index = decodeIndex(json.dumps({"versions": [
+        plainEntry("linux", "x86_64", "0.9.0"),
+        plainEntry("linux", "x86_64", "1.0.0-rc.1"),
+        plainEntry("linux", "x86_64", "0.9.1"),
+        plainEntry("macos", "aarch64", "0.10.0"),
+    ]}), "test://index");
+    linuxBox = Target(target_os="linux", arch="x86_64");
+    macBox = Target(target_os="macos", arch="aarch64");
+    assert latestVersionString(index, linuxBox) == "0.9.1", "newest stable with an artifact";
+    assert latestVersionString(index, macBox) == "0.10.0", "per-target latest";
+    empty = decodeIndex(json.dumps({"versions": []}), "test://index");
+    assert latestVersionString(empty, linuxBox) is None, "empty index has no latest";
+    rcOnly = decodeIndex(json.dumps({"versions": [
+        plainEntry("linux", "x86_64", "1.0.0-rc.1"),
+        plainEntry("linux", "x86_64", "1.0.0-rc.2"),
+    ]}), "test://index");
+    assert latestVersionString(rcOnly, linuxBox) == "1.0.0-rc.2", "highest prerelease when no stable exists";
+}
+
+test "aliases validate resolve persist and drive the launcher link" {
+    pair = newTmpHome();
+    home = pair[0];
+    base = pair[1];
+    try {
+        index: str = buildIndex(base + "-idx", [
+            fixtureEntry("0.9.0", "fakejac-0.9.0.sh"),
+            fixtureEntry("0.9.1", "fakejac-0.9.1.sh"),
+        ]);
+        _ = installVersion(home, "0.9.1", index);
+        _ = installVersion(home, "0.9.0", index);
+        raised: bool = False;
+        try {
+            setAlias(home, "ghost", "9.9.9");
+        } except JacupError as e {
+            raised = True;
+            assert "not installed" in str(e), f"alias needs an installed version: {str(e)}";
+        }
+        assert raised, "alias of missing version must fail";
+        for bad in ["0.9.1", "latest", "-lead", "has space", ""] {
+            raised = False;
+            try {
+                setAlias(home, bad, "0.9.1");
+            } except JacupError as e {
+                raised = True;
+                assert "alias" in str(e), f"actionable rejection of '{bad}': {str(e)}";
+            }
+            assert raised, f"alias '{bad}' must be rejected";
+        }
+        setAlias(home, "stable", "0.9.1");
+        assert resolveAliasOrVersion(home, "stable") == "0.9.1", "alias resolves to its version";
+        assert resolveAliasOrVersion(home, "0.9.0") == "0.9.0", "exact version passes through";
+        assert loadConfig(home).aliases == {"stable": "0.9.1"}, "aliases persist in config";
+        raised = False;
+        try {
+            _ = resolveAliasOrVersion(home, "nope");
+        } except JacupError as e {
+            raised = True;
+            assert "neither an exact version nor a defined alias" in str(e), f"unknown token: {str(e)}";
+        }
+        assert raised, "unknown switch token must fail";
+        was: str = removeAlias(home, "stable");
+        assert was == "0.9.1", "removed alias returns its version";
+        assert loadConfig(home).aliases == {}, "alias removed from config";
+
+        # the default-version setter maintains the PATH launcher link.
+        shimObj = setDefaultVersion(home, "0.9.0");
+        assert shimObj is not None, "launcher link created";
+        shimPath: str = str(shimObj);
+        assert shimPath == home.activeJacPath(), "shim path returned";
+        assert os.path.islink(shimPath), "launcher is a symlink";
+        assert os.path.realpath(shimPath) == os.path.realpath(home.binaryPath("0.9.0")), "shim targets the default";
+    } finally {
+        cleanupTmp(base);
+        cleanupTmp(base + "-idx");
     }
 }

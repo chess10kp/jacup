@@ -244,6 +244,31 @@ def availableVersionStrings(index: ReleaseIndex) -> list[str] {
     return sortVersionStrings(names);
 }
 
+def latestVersionString(index: ReleaseIndex, target: Target) -> str | None {
+    # Newest release with an artifact for `target`: highest stable, falling
+    # back to the highest prerelease when the index has no stable builds.
+    usable: list[str] = [];
+    for release in index.releases {
+        for artifact in release.artifacts {
+            if artifact.target_os == target.target_os and artifact.arch == target.arch {
+                usable.append(release.version);
+                break;
+            }
+        }
+    }
+    if not usable {
+        return None;
+    }
+    ranked: list[str] = sortVersionStrings(usable);
+    stables: list[str] = [];
+    for v in ranked {
+        if parseVersion(v).isRelease() {
+            stables.append(v);
+        }
+    }
+    return stables[-1] if stables else ranked[-1];
+}
+
 def sha256File(path: str) -> str {
     digest = hashlib.sha256();
     try {

@@ -41,6 +41,22 @@ obj JacupHome {
         return os.path.join(self.data_dir, "current");
     }
 
+    def binDir() -> str {
+        return os.path.join(self.data_dir, "bin");
+    }
+
+    def activeJacPath() -> str {
+        return os.path.join(self.binDir(), binaryName());
+    }
+
+    def ensureBinDir() -> None {
+        try {
+            os.makedirs(self.binDir(), exist_ok=True);
+        } except OSError as e {
+            raise JacupError(f"cannot create the jacup bin directory {self.binDir()}: {str(e)}");
+        }
+    }
+
     def ensureDataDirs() -> None {
         try {
             os.makedirs(self.versionsDir(), exist_ok=True);
@@ -120,6 +136,32 @@ def removeQuiet(path: str) -> None {
     } except OSError {
         return;
     }
+}
+
+def linkActiveJac(home: JacupHome, version: str) -> str | None {
+    # Point <data>/bin/jac at the installed version so a PATH entry runs the
+    # default Jac. Returns the launcher path, or None when the platform
+    # refuses symlinks (Windows without Developer Mode/admin rights).
+    target: str = home.binaryPath(version);
+    if not os.path.isfile(target) {
+        raise JacupError(f"cannot link 'jac': {target} is missing; install {version} first");
+    }
+    home.ensureBinDir();
+    shim: str = home.activeJacPath();
+    linkTmp: str = shim + ".tmp-link";
+    try {
+        if os.path.lexists(linkTmp) {
+            os.unlink(linkTmp);
+        }
+        os.symlink(target, linkTmp);
+        os.replace(linkTmp, shim);
+    } except OSError as e {
+        if isWindows() {
+            return None;
+        }
+        raise JacupError(f"cannot create the 'jac' launcher link {shim} -> {target}: {str(e)}");
+    }
+    return shim;
 }
 
 def writeTextAtomic(path: str, content: str) -> None {

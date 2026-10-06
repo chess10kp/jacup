@@ -7,10 +7,10 @@ config value so a stale pointer can never select a different version.
 """
 
 import os;
-import from src.config { loadConfig, saveConfig, JacupConfig }
+import from src.config { loadConfig, saveConfig, JacupConfig, validateAlias }
 import from src.errors { JacupError }
 import from src.install { loadMetadata }
-import from src.paths { JacupHome, binaryName, isWindows, writeTextAtomic }
+import from src.paths { JacupHome, binaryName, isWindows, linkActiveJac, writeTextAtomic }
 import from src.semver { parseVersion }
 
 glob PIN_FILE: str = ".jac-version";
@@ -122,13 +122,57 @@ def installedPath(home: JacupHome, version: str) -> str {
     return binPath;
 }
 
-def setDefaultVersion(home: JacupHome, version: str) -> None {
+def setDefaultVersion(home: JacupHome, version: str) -> str | None {
     parseVersion(version);
     _ = installedPath(home, version);
     cfg = loadConfig(home);
     cfg.default_version = version;
     saveConfig(home, cfg);
     writeTextAtomic(home.currentFile(), version + "\n");
+    return linkActiveJac(home, version);
+}
+
+def setAlias(home: JacupHome, name: str, version: str) -> None {
+    validateAlias(name);
+    parseVersion(version);
+    _ = installedPath(home, version);
+    cfg = loadConfig(home);
+    cfg.aliases[name] = version;
+    saveConfig(home, cfg);
+}
+
+def removeAlias(home: JacupHome, name: str) -> str {
+    cfg = loadConfig(home);
+    if name not in cfg.aliases {
+        listing = ", ".join(sorted(cfg.aliases)) or "(none)";
+        raise JacupError(f"no alias '{name}' is defined (defined aliases: {listing})");
+    }
+    version: str = cfg.aliases[name];
+    cfg.aliases.pop(name);
+    saveConfig(home, cfg);
+    return version;
+}
+
+def resolveAliasOrVersion(home: JacupHome, token: str) -> str {
+    exact: str | None = None;
+    try {
+        parseVersion(token);
+        exact = token;
+    } except JacupError as e {
+        exact = None;
+    }
+    if exact is not None {
+        return exact;
+    }
+    cfg = loadConfig(home);
+    if token in cfg.aliases {
+        return cfg.aliases[token];
+    }
+    listing = ", ".join(sorted(cfg.aliases)) or "(none)";
+    raise JacupError(
+        f"'{token}' is neither an exact version nor a defined alias (aliases: {listing}); "
+        "define one with 'jacup alias <name> <version>'"
+    );
 }
 
 def pinProjectVersion(home: JacupHome, version: str, directory: str) -> str {

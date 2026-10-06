@@ -15,8 +15,6 @@ import subprocess;
 import tempfile;
 import from src.errors { JacupError }
 
-glob REPO_ROOT_CACHE: str = "";
-
 def findRoot(start: str) -> str {
     current: str = os.path.abspath(start);
     while True {
@@ -32,10 +30,9 @@ def findRoot(start: str) -> str {
 }
 
 def repoRoot() -> str {
-    if REPO_ROOT_CACHE == "" {
-        REPO_ROOT_CACHE = findRoot(os.getcwd());
-    }
-    return REPO_ROOT_CACHE;
+    # No module-level cache: mutating a glob from a function is not portable
+    # across jaclang versions (UnboundLocalError on current releases).
+    return findRoot(os.getcwd());
 }
 
 def fixturePath(name: str) -> str {

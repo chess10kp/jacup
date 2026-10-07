@@ -34,17 +34,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install jaclang pyinstaller
+      - run: pip install jaclang
       - run: bash scripts/build_binary.sh "${{ matrix.target }}" dist
       - name: Checksum
         run: |
           cd dist
-          python3 -c "import hashlib,sys
-          h = hashlib.sha256()
-          with open(sys.argv[1], 'rb') as f:
-              for chunk in iter(lambda: f.read(1 << 20), b''):
-                  h.update(chunk)
-          print(h.hexdigest())" "jacup-${{ matrix.target }}" > "jacup-${{ matrix.target }}.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "jacup-${{ matrix.target }}" > "jacup-${{ matrix.target }}.sha256"
+          else
+            shasum -a 256 "jacup-${{ matrix.target }}" > "jacup-${{ matrix.target }}.sha256"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: jacup-${{ matrix.target }}

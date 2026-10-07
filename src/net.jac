@@ -1,0 +1,35 @@
+"""Network bytes helper backed by the host curl executable."""
+
+import os;
+import time;
+
+def shellQuote(value: str) -> str {
+    result: str = "'";
+    for ch in value {
+        if ch == "'" {
+            result = result + "'\\''";
+        } else {
+            result = result + ch;
+        }
+    }
+    return result + "'";
+}
+
+def:pub fetchBytes(url: str) -> bytes {
+    tmp: str = os.path.join(
+        "/tmp",
+        f"jacup-net-{os.getpid()}-{int(time.time() * 1000000)}"
+    );
+    command: str = "curl --fail --silent --show-error --location --output " + shellQuote(tmp) + " " + shellQuote(url);
+    if os.system(command) != 0 {
+        raise OSError(f"curl failed while downloading {url}");
+    }
+    fh = open(tmp, "rb");
+    try {
+        data: bytes = fh.read();
+    } finally {
+        fh.close();
+    }
+    os.unlink(tmp);
+    return data;
+}

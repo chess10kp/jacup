@@ -8,8 +8,17 @@ import shutil;
 import tempfile;
 import from src.config { JacupConfig, loadConfig, resolveIndexUrl, saveConfig, validateAlias }
 import from src.errors { JacupError }
-import from src.install { installVersion, installedVersions, loadMetadata, uninstallVersion }
-import from src.paths { JacupHome, binaryName, writeTextAtomic }
+import from src.install { installVersion, loadMetadata, uninstallVersion }
+import from src.installed { installedVersions }
+import from src.path_core {
+    activeJacPath,
+    binaryName,
+    binaryPath,
+    configFile,
+    downloadsDir,
+    metadataPath,
+    versionDir,
+}
 import from src.releases {
     decodeIndex,
     fetchIndex,
@@ -66,9 +75,19 @@ glob BAD_VERSIONS: list[str] = [
     "01.2.3",
 ];
 
-def newTmpHome() -> tuple[JacupHome, str] {
+def writeTextAtomic(path: str, content: str) -> None {
+    tmp: str = path + ".tmp-test";
+    fh = open(tmp, "w");
+    try {
+        fh.write(content);
+    } finally {
+        fh.close();
+    }
+    os.replace(tmp, path);
+}
+def newTmpHome() -> tuple[dict[str, str], str] {
     base: str = tempfile.mkdtemp(prefix="jacup-test-");
-    home = JacupHome(data_dir=base, config_dir=base);
+    home: dict[str, str] = {"data_dir": base, "config_dir": base};
     return (home, base);
 }
 
@@ -87,6 +106,7 @@ def sha256Text(text: str) -> str {
 }
 
 def buildIndex(tmp: str, entries: list[dict[str, any]]) -> str {
+    os.makedirs(tmp, exist_ok=True);
     path: str = os.path.join(tmp, "index.json");
     writeTextAtomic(path, json.dumps({"versions": entries}, indent=2) + "\n");
     return "file://" + path;
@@ -338,7 +358,7 @@ test "config roundtrips and rejects malformed json" {
         again = loadConfig(home);
         assert again.default_version == "0.9.2", "default persisted";
         assert again.release_index_url == "https://example.test/index.json", "index url persisted";
-        path: str = home.configFile();
+        path: str = configFile(home);
         writeTextAtomic(path, "{definitely not json");
         raised: bool = False;
         try {
@@ -459,10 +479,10 @@ test "install verifies checksums and stays atomic" {
             assert "checksum mismatch" in str(e), f"checksum error actionable: {str(e)}";
         }
         assert raised, "corrupted artifact must be rejected";
-        assert not os.path.isdir(home.versionDir("0.9.2")), "no version directory on checksum failure";
+        assert not os.path.isdir(versionDir(home, "0.9.2")), "no version directory on checksum failure";
         downloads: list[str] = [];
-        if os.path.isdir(home.downloadsDir()) {
-            for name in os.listdir(home.downloadsDir()) {
+        if os.path.isdir(downloadsDir(home)) {
+            for name in os.listdir(downloadsDir(home)) {
                 downloads.append(name);
             }
         }
@@ -473,21 +493,21 @@ test "install verifies checksums and stays atomic" {
             fixtureEntry("0.9.1", "fakejac-0.9.1.sh"),
         ]);
         _ = installVersion(home, "0.9.0", index);
-        binPath: str = home.binaryPath("0.9.0");
+        binPath: str = binaryPath(home, "0.9.0");
         assert os.path.isfile(binPath), "binary installed";
         assert os.access(binPath, os.X_OK), "binary is executable";
         meta = loadMetadata(home, "0.9.0");
-        assert meta.version == "0.9.0", "metadata version";
-        assert meta.sha256 == sha256File(binPath), "metadata checksum matches file";
-        assert meta.target == currentTarget().name(), "metadata target";
-        assert meta.url.startswith("file://"), "metadata url recorded";
-        assert meta.installed_at != "", "metadata timestamp recorded";
+        assert meta[0] == "0.9.0", "metadata version";
+        assert meta[3] == sha256File(binPath), "metadata checksum matches file";
+        assert meta[1] == currentTarget().name(), "metadata target";
+        assert meta[2].startswith("file://"), "metadata url recorded";
+        assert meta[4] != "", "metadata timestamp recorded";
         assert installedVersions(home) == ["0.9.0"], "one version listed";
 
         idempotentPath: str = installVersion(home, "0.9.0", index);
-        assert idempotentPath == home.versionDir("0.9.0"), "reinstall of identical version is accepted";
+        assert idempotentPath == versionDir(home, "0.9.0"), "reinstall of identical version is accepted";
 
-        metaPath: str = home.metadataPath("0.9.0");
+        metaPath: str = metadataPath(home, "0.9.0");
         writeTextAtomic(metaPath, json.dumps({
             "version": "0.9.0",
             "target": "linux-x86_64",
@@ -537,9 +557,9 @@ test "uninstall guards the default and removes exact versions" {
             assert "refusing" in str(e) and "use" in str(e), f"guard actionable: {str(e)}";
         }
         assert raised, "default guard tripped";
-        assert os.path.isdir(home.versionDir("0.9.1")), "default version still installed";
+        assert os.path.isdir(versionDir(home, "0.9.1")), "default version still installed";
         uninstallVersion(home, "0.9.0");
-        assert not os.path.isdir(home.versionDir("0.9.0")), "non-default removed";
+        assert not os.path.isdir(versionDir(home, "0.9.0")), "non-default removed";
         raised = False;
         try {
             uninstallVersion(home, "9.9.9");
@@ -658,9 +678,9 @@ test "aliases validate resolve persist and drive the launcher link" {
         shimObj = setDefaultVersion(home, "0.9.0");
         assert shimObj is not None, "launcher link created";
         shimPath: str = str(shimObj);
-        assert shimPath == home.activeJacPath(), "shim path returned";
+        assert shimPath == activeJacPath(home), "shim path returned";
         assert os.path.islink(shimPath), "launcher is a symlink";
-        assert os.path.realpath(shimPath) == os.path.realpath(home.binaryPath("0.9.0")), "shim targets the default";
+        assert os.path.realpath(shimPath) == os.path.realpath(binaryPath(home, "0.9.0")), "shim targets the default";
     } finally {
         cleanupTmp(base);
         cleanupTmp(base + "-idx");

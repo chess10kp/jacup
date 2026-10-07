@@ -8,13 +8,22 @@ place: it is accepted only when its metadata and checksum match.
 
 import json;
 import os;
-import shutil;
-import tempfile;
-import from datetime { datetime }
+import time;
+import from datetime { datetime, timezone }
 import from src.config { loadConfig }
+import from src.installed { installedVersions }
 import from src.errors { JacupError }
-import from src.paths { JacupHome, binaryName, isWindows, removeQuiet, writeTextAtomic }
+import from src.path_core {
+    binaryName,
+    binaryPath,
+    currentFile,
+    downloadsDir,
+    isWindows,
+    metadataPath,
+    versionDir,
+}
 import from src.releases {
+    Artifact,
     ReleaseIndex,
     currentTarget,
     fetchIndex,
@@ -28,16 +37,89 @@ import from src.releases {
 }
 import from src.semver { parseVersion }
 
-obj InstallMetadata {
-    has version: str, target: str, url: str, sha256: str, installed_at: str;
+glob INSTALL_TMP_COUNTER: int = 0;
+
+def makeInstallDir(baseDir: str) -> str {
+    i: int = 0;
+    while i < 1000 {
+        candidate: str = os.path.join(
+            baseDir,
+            f"install-{os.getpid()}-{int(time.time() * 1000000)}-{INSTALL_TMP_COUNTER + i}"
+        );
+        try {
+            os.makedirs(candidate);
+            return candidate;
+        } except OSError {
+            i += 1;
+        }
+    }
+    raise OSError(f"could not create a temporary download directory under {baseDir}");
+}
+def writeInstallText(path: str, content: str) -> None {
+    tmp: str = path + ".tmp-native";
+    fh = open(tmp, "w");
+    try {
+        fh.write(content);
+    } finally {
+        fh.close();
+    }
+    if os.system("mv " + installShellQuote(tmp) + " " + installShellQuote(path)) != 0 {
+        raise JacupError(f"failed to replace {path}");
+    }
+}
+def installShellQuote(value: str) -> str {
+    result: str = "'";
+    for ch in value {
+        if ch == "'" {
+            result = result + "'\\''";
+        } else {
+            result = result + ch;
+        }
+    }
+    return result + "'";
+}
+
+def removeTree(path: str) -> None {
+    if os.system("rm -rf " + installShellQuote(path)) != 0 {
+        raise OSError(f"failed to remove {path}");
+    }
 }
 
 def nowIso() -> str {
-    return datetime.now().astimezone().isoformat();
+    return datetime.now(timezone.utc).isoformat();
 }
 
-def loadMetadata(home: JacupHome, version: str) -> InstallMetadata {
-    path: str = home.metadataPath(version);
+def metadataField(raw: str, path: str, field: str) -> str {
+    marker: str = "\"" + field + "\":";
+    at: int = raw.find(marker);
+    if at < 0 {
+        raise JacupError(f"malformed metadata file {path}: missing '{field}'");
+    }
+    valueStart: int = at + len(marker);
+    while valueStart < len(raw) {
+        ch: str = raw[valueStart];
+        if ch != " " and ch != "\n" and ch != "\r" and ch != "\t" {
+            break;
+        }
+        valueStart = valueStart + 1;
+    }
+    if valueStart >= len(raw) or raw[valueStart] != "\"" {
+        raise JacupError(f"malformed metadata file {path}: '{field}' must be a string");
+    }
+    valueStart = valueStart + 1;
+    valueEnd: int = raw.find("\"", valueStart);
+    if valueEnd < 0 {
+        raise JacupError(f"malformed metadata file {path}: unterminated '{field}'");
+    }
+    value: str = raw[valueStart:valueEnd];
+    if value == "" {
+        raise JacupError(f"malformed metadata file {path}: '{field}' must be a non-empty string");
+    }
+    return value;
+}
+
+def loadMetadata(home: dict[str, str], version: str) -> list[str] {
+    path: str = metadataPath(home, version);
     if not os.path.isfile(path) {
         raise JacupError(
             f"missing metadata file {path}; reinstall this version with "
@@ -51,68 +133,34 @@ def loadMetadata(home: JacupHome, version: str) -> InstallMetadata {
         } finally {
             rf.close();
         }
-        data = json.loads(raw);
     } except Exception as e {
         raise JacupError(
-            f"malformed metadata file {path}: {str(e)}; repair by running "
-            f"'jacup uninstall {version}' then 'jacup install {version}'"
+            f"malformed metadata file {path}: {e}; repair by running "
+            f"'jacup uninstall {version}' and 'jacup install {version}'"
         );
     }
-    if not isinstance(data, dict) {
-        raise JacupError(
-            f"malformed metadata file {path}: expected a JSON object; repair by running "
-            f"'jacup uninstall {version}' then 'jacup install {version}'"
-        );
-    }
-    fields: list[str] = ["version", "target", "url", "sha256", "installed_at"];
-    values: dict[str, any] = {};
-    for field in fields {
-        v = data.get(field);
-        if not isinstance(v, str) or v == "" {
-            raise JacupError(
-                f"malformed metadata file {path}: '{field}' must be a non-empty string; repair "
-                f"by running 'jacup uninstall {version}' then 'jacup install {version}'"
-            );
-        }
-        values[field] = v;
+    values: list[str] = [];
+    for field in ["version", "target", "url", "sha256", "installed_at"] {
+        values.append(metadataField(raw, path, field));
     }
     try {
-        parseVersion(values["version"]);
+        parseVersion(values[0]);
     } except JacupError {
-        raise JacupError(f"malformed metadata file {path}: version '{values['version']}' is not an exact version");
+        raise JacupError(f"malformed metadata file {path}: version '{values[0]}' is not an exact version");
     }
-    if not isValidChecksum(values["sha256"]) {
+    if not isValidChecksum(values[3]) {
         raise JacupError(f"malformed metadata file {path}: 'sha256' must be 64 lowercase hex characters");
     }
-    return InstallMetadata(
-        version=values["version"],
-        target=values["target"],
-        url=values["url"],
-        sha256=values["sha256"],
-        installed_at=values["installed_at"],
-    );
+    return values;
 }
 
-def installedVersions(home: JacupHome) -> list[str] {
-    versionsRoot: str = home.versionsDir();
-    if not os.path.isdir(versionsRoot) {
-        return [];
-    }
-    try {
-        names: list[str] = sorted(os.listdir(versionsRoot));
-    } except OSError as e {
-        raise JacupError(f"cannot list installed versions in {versionsRoot}: {str(e)}");
-    }
-    out: list[str] = [];
-    for name in names {
-        if os.path.isdir(os.path.join(versionsRoot, name)) {
-            out.append(name);
-        }
-    }
-    return out;
+def metadataVersion(home: dict[str, str], version: str) -> str {
+    meta: list[str] = loadMetadata(home, version);
+    return meta[0];
 }
 
-def installVersion(home: JacupHome, version: str, indexUrl: str) -> str {
+
+def installVersion(home: dict[str, str], version: str, indexUrl: str) -> str {
     parseVersion(version);
     target = currentTarget();
     index: ReleaseIndex = fetchIndex(indexUrl);
@@ -124,21 +172,21 @@ def installVersion(home: JacupHome, version: str, indexUrl: str) -> str {
         );
     }
     artifact = selectArtifact(release, target);
-    vdir: str = home.versionDir(version);
+    vdir: str = versionDir(home, version);
     if os.path.exists(vdir) {
         return confirmExisting(home, version, vdir, artifact, target);
     }
     return downloadAndStage(home, version, vdir, artifact, target);
 }
 
-def confirmExisting(home: JacupHome, version: str, vdir: str, artifact: any, target: Target) -> str {
+def confirmExisting(home: dict[str, str], version: str, vdir: str, artifact: Artifact, target: Target) -> str {
     meta = loadMetadata(home, version);
-    binPath: str = home.binaryPath(version);
+    binPath: str = binaryPath(home, version);
     matches: bool = (
-        meta.version == version
-        and meta.target == target.name()
-        and meta.url == artifact.url
-        and meta.sha256 == artifact.sha256
+        meta[0] == version
+        and meta[1] == target.name()
+        and meta[2] == artifact.url
+        and meta[3] == artifact.sha256
     );
     if matches and os.path.isfile(binPath) and sha256File(binPath) == artifact.sha256 {
         print(f"jacup: {version} already installed at {vdir}");
@@ -150,12 +198,19 @@ def confirmExisting(home: JacupHome, version: str, vdir: str, artifact: any, tar
     );
 }
 
-def downloadAndStage(home: JacupHome, version: str, vdir: str, artifact: any, target: Target) -> str {
-    home.ensureDataDirs();
+def downloadAndStage(home: dict[str, str], version: str, vdir: str, artifact: Artifact, target: Target) -> str {
+    versionsPath: str = os.path.join(home["data_dir"], "versions");
+    downloadsPath: str = downloadsDir(home);
+    if not os.path.isdir(versionsPath) {
+        os.makedirs(versionsPath);
+    }
+    if not os.path.isdir(downloadsPath) {
+        os.makedirs(downloadsPath);
+    }
     try {
-        work: str = tempfile.mkdtemp(prefix="install-", dir=home.downloadsDir());
+        work: str = makeInstallDir(downloadsDir(home));
     } except OSError as e {
-        raise JacupError(f"cannot create a temporary download directory in {home.downloadsDir()}: {str(e)}");
+        raise JacupError(f"cannot create a temporary download directory in {downloadsDir(home)}: {e}");
     }
     staging: str = os.path.join(work, version);
     os.makedirs(staging);
@@ -176,22 +231,20 @@ def downloadAndStage(home: JacupHome, version: str, vdir: str, artifact: any, ta
                 "the download was discarded and nothing was installed"
             );
         }
-        if not isWindows() {
-            os.chmod(stagedBin, 0o755);
+        if not isWindows() and os.system("chmod 755 " + installShellQuote(stagedBin)) != 0 {
+            raise JacupError(f"cannot make downloaded artifact executable: {stagedBin}");
         }
-        meta = InstallMetadata(
-            version=version,
-            target=target.name(),
-            url=artifact.url,
-            sha256=artifact.sha256,
-            installed_at=nowIso(),
-        );
-        writeTextAtomic(os.path.join(staging, "metadata.json"), serializeMetadata(meta));
-        try {
-            os.replace(staging, vdir);
-        } except OSError as e {
+        meta: list[str] = [
+            version,
+            target.name(),
+            artifact.url,
+            artifact.sha256,
+            nowIso(),
+        ];
+        writeInstallText(os.path.join(staging, "metadata.json"), serializeMetadata(meta));
+        if os.system("mv " + installShellQuote(staging) + " " + installShellQuote(vdir)) != 0 {
             raise JacupError(
-                f"could not finalize installation of {version} into {vdir}: {str(e)}; if a version "
+                f"could not finalize installation of {version} into {vdir}; if a version "
                 f"directory already exists, run 'jacup uninstall {version}' first"
             );
         }
@@ -199,28 +252,25 @@ def downloadAndStage(home: JacupHome, version: str, vdir: str, artifact: any, ta
         return vdir;
     } finally {
         if os.path.isdir(work) {
-            shutil.rmtree(work, ignore_errors=True);
+            removeTree(work);
         }
     }
 }
 
-def serializeMetadata(meta: InstallMetadata) -> str {
-    return json.dumps(
-        {
-            "version": meta.version,
-            "target": meta.target,
-            "url": meta.url,
-            "sha256": meta.sha256,
-            "installed_at": meta.installed_at,
-        },
-        indent=2,
-        sort_keys=True,
-    ) + "\n";
+def serializeMetadata(meta: list[str]) -> str {
+    return (
+        "{\"version\":" + json.dumps(meta[0])
+        + ",\"target\":" + json.dumps(meta[1])
+        + ",\"url\":" + json.dumps(meta[2])
+        + ",\"sha256\":" + json.dumps(meta[3])
+        + ",\"installed_at\":" + json.dumps(meta[4])
+        + "}\n"
+    );
 }
 
-def uninstallVersion(home: JacupHome, version: str) -> None {
+def uninstallVersion(home: dict[str, str], version: str) -> None {
     parseVersion(version);
-    vdir: str = home.versionDir(version);
+    vdir: str = versionDir(home, version);
     installed = installedVersions(home);
     if version not in installed {
         listing = ", ".join(sorted(installed)) or "(none)";
@@ -234,11 +284,11 @@ def uninstallVersion(home: JacupHome, version: str) -> None {
         );
     }
     try {
-        shutil.rmtree(vdir);
+        removeTree(vdir);
     } except OSError as e {
-        raise JacupError(f"failed to remove {vdir}: {str(e)}");
+        raise JacupError(f"failed to remove {vdir}: {e}");
     }
-    pointer: str = home.currentFile();
+    pointer: str = currentFile(home);
     if os.path.isfile(pointer) {
         try {
             rf = open(pointer, "r");
@@ -248,7 +298,9 @@ def uninstallVersion(home: JacupHome, version: str) -> None {
                 rf.close();
             }
             if content == version {
-                removeQuiet(pointer);
+                if os.path.exists(pointer) {
+                    os.unlink(pointer);
+                }
             }
         } except OSError {
             return;

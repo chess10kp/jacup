@@ -7,13 +7,45 @@ config value so a stale pointer can never select a different version.
 """
 
 import os;
+import from os.path { abspath }
 import from src.config { loadConfig, saveConfig, JacupConfig, validateAlias }
 import from src.errors { JacupError }
-import from src.install { loadMetadata }
-import from src.paths { JacupHome, binaryName, isWindows, linkActiveJac, writeTextAtomic }
+import from src.install { metadataVersion }
+import from src.path_core {
+    binaryName,
+    currentFile,
+    isWindows,
+    metadataPath,
+    versionDir,
+    versionsDir,
+}
+import from src.link { linkActiveJac }
 import from src.semver { parseVersion }
 
 glob PIN_FILE: str = ".jac-version";
+def selectionShellQuote(value: str) -> str {
+    result: str = "'";
+    for ch in value {
+        if ch == "'" {
+            result = result + "'\\''";
+        } else {
+            result = result + ch;
+        }
+    }
+    return result + "'";
+}
+def writeSelectionText(path: str, content: str) -> None {
+    tmp: str = path + ".tmp-native";
+    fh = open(tmp, "w");
+    try {
+        fh.write(content);
+    } finally {
+        fh.close();
+    }
+    if os.system("mv " + selectionShellQuote(tmp) + " " + selectionShellQuote(path)) != 0 {
+        raise JacupError(f"failed to replace {path}");
+    }
+}
 
 obj Selection {
     has version: str, source: str;
@@ -24,7 +56,7 @@ def pinFilePath(directory: str) -> str {
 }
 
 def findPinFile(startDir: str) -> str | None {
-    current: str = os.path.abspath(startDir);
+    current: str = abspath(startDir);
     while True {
         candidate: str = os.path.join(current, PIN_FILE);
         if os.path.isfile(candidate) {
@@ -47,7 +79,7 @@ def readPinFile(path: str) -> str {
             rf.close();
         }
     } except Exception as e {
-        raise JacupError(f"cannot read pin file {path}: {str(e)}; fix or remove the file ('jacup unpin' removes it from its directory)");
+        raise JacupError(f"cannot read pin file {path}: {e}; fix or remove the file ('jacup unpin' removes it from its directory)");
     }
     content: str = raw;
     if content.endswith("\n") {
@@ -65,7 +97,7 @@ def readPinFile(path: str) -> str {
     return content;
 }
 
-def resolveVersion(home: JacupHome, startDir: str) -> Selection {
+def resolveVersion(home: dict[str, str], startDir: str) -> Selection {
     pin = findPinFile(startDir);
     if pin is not None {
         version: str = readPinFile(pin);
@@ -82,30 +114,20 @@ def resolveVersion(home: JacupHome, startDir: str) -> Selection {
     );
 }
 
-def installedPath(home: JacupHome, version: str) -> str {
+def installedPath(home: dict[str, str], version: str) -> str {
     parseVersion(version);
-    vdir: str = home.versionDir(version);
+    vdir: str = versionDir(home, version);
     if not os.path.isdir(vdir) {
-        installed: list[str] = [];
-        versionsRoot: str = home.versionsDir();
-        if os.path.isdir(versionsRoot) {
-            try {
-                installed = sorted(os.listdir(versionsRoot));
-            } except OSError {
-                installed = [];
-            }
-        }
-        listing = ", ".join(installed) or "(none)";
         raise JacupError(
-            f"Jac {version} is not installed (expected {vdir}); installed versions: {listing}. "
+            f"Jac {version} is not installed (expected {vdir}). "
             f"Install it with 'jacup install {version}' or select another version"
         );
     }
-    meta = loadMetadata(home, version);
-    if meta.version != version {
+    metaVersion: str = metadataVersion(home, version);
+    if metaVersion != version {
         raise JacupError(
-            f"incompatible metadata for {version}: {home.metadataPath(version)} declares version "
-            f"{meta.version}; repair by running 'jacup uninstall {version}' then "
+            f"incompatible metadata for {version}: {metadataPath(home, version)} declares version "
+            f"{metaVersion}; repair by running 'jacup uninstall {version}' then "
             f"'jacup install {version}'"
         );
     }
@@ -116,23 +138,23 @@ def installedPath(home: JacupHome, version: str) -> str {
             f"'jacup uninstall {version}' then 'jacup install {version}'"
         );
     }
-    if not isWindows() and not os.access(binPath, os.X_OK) {
+    if not isWindows() and os.system("test -x " + selectionShellQuote(binPath)) != 0 {
         raise JacupError(f"Jac executable for {version} is not executable: {binPath}; fix with 'chmod +x {binPath}'");
     }
     return binPath;
 }
 
-def setDefaultVersion(home: JacupHome, version: str) -> str | None {
+def setDefaultVersion(home: dict[str, str], version: str) -> str | None {
     parseVersion(version);
     _ = installedPath(home, version);
     cfg = loadConfig(home);
     cfg.default_version = version;
     saveConfig(home, cfg);
-    writeTextAtomic(home.currentFile(), version + "\n");
+    writeSelectionText(currentFile(home), version + "\n");
     return linkActiveJac(home, version);
 }
 
-def setAlias(home: JacupHome, name: str, version: str) -> None {
+def setAlias(home: dict[str, str], name: str, version: str) -> None {
     validateAlias(name);
     parseVersion(version);
     _ = installedPath(home, version);
@@ -141,7 +163,7 @@ def setAlias(home: JacupHome, name: str, version: str) -> None {
     saveConfig(home, cfg);
 }
 
-def removeAlias(home: JacupHome, name: str) -> str {
+def removeAlias(home: dict[str, str], name: str) -> str {
     cfg = loadConfig(home);
     if name not in cfg.aliases {
         listing = ", ".join(sorted(cfg.aliases)) or "(none)";
@@ -153,7 +175,7 @@ def removeAlias(home: JacupHome, name: str) -> str {
     return version;
 }
 
-def resolveAliasOrVersion(home: JacupHome, token: str) -> str {
+def resolveAliasOrVersion(home: dict[str, str], token: str) -> str {
     exact: str | None = None;
     try {
         parseVersion(token);
@@ -175,22 +197,22 @@ def resolveAliasOrVersion(home: JacupHome, token: str) -> str {
     );
 }
 
-def pinProjectVersion(home: JacupHome, version: str, directory: str) -> str {
+def pinProjectVersion(home: dict[str, str], version: str, directory: str) -> str {
     parseVersion(version);
     _ = installedPath(home, version);
-    path: str = pinFilePath(os.path.abspath(directory));
-    writeTextAtomic(path, version + "\n");
+    path: str = pinFilePath(abspath(directory));
+    writeSelectionText(path, version + "\n");
     return path;
 }
 
 def unpinProjectVersion(directory: str) -> None {
-    path: str = pinFilePath(os.path.abspath(directory));
+    path: str = pinFilePath(abspath(directory));
     if not os.path.isfile(path) {
-        raise JacupError(f"no {PIN_FILE} in {os.path.abspath(directory)}; nothing to unpin");
+        raise JacupError(f"no {PIN_FILE} in {abspath(directory)}; nothing to unpin");
     }
     try {
         os.unlink(path);
     } except OSError as e {
-        raise JacupError(f"failed to remove {path}: {str(e)}");
+        raise JacupError(f"failed to remove {path}: {e}");
     }
 }

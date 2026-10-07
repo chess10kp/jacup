@@ -5,13 +5,16 @@ Exit codes: 0 on success; 2 for CLI, configuration, and selection errors;
 """
 
 import os;
+import from os.path { abspath }
 import sys;
 import from src.config { loadConfig, resolveIndexUrl }
 import from src.doctor { runDoctor }
 import from src.errors { JacupError }
 import from src.exec { execJac }
-import from src.install { installVersion, installedVersions, uninstallVersion }
-import from src.paths { JacupHome, resolveHome }
+import from src.install { installVersion, uninstallVersion }
+import from src.installed { installedVersions }
+import from src.path_core { binDir }
+import from src.target { TARGET_OS }
 import from src.releases { availableVersionStrings, currentTarget, fetchIndex, findRelease, latestVersionString }
 import from src.selection {
     pinProjectVersion,
@@ -24,6 +27,60 @@ import from src.selection {
     installedPath,
 }
 import from src.semver { parseVersion, sortVersionStrings }
+def windowsDataDir() -> str {
+    localAppData = os.environ.get("LOCALAPPDATA");
+    if not localAppData {
+        profile = os.environ.get("USERPROFILE");
+        if not profile {
+            raise JacupError("cannot locate the Windows application-data directory; set JACUP_HOME explicitly");
+        }
+        localAppData = os.path.join(profile, "AppData", "Local");
+    }
+    return os.path.join(localAppData, "jacup");
+}
+
+def windowsConfigDir() -> str {
+    appData = os.environ.get("APPDATA");
+    if not appData {
+        profile = os.environ.get("USERPROFILE");
+        if not profile {
+            raise JacupError("cannot locate the Windows config directory; set JACUP_HOME explicitly");
+        }
+        appData = os.path.join(profile, "AppData", "Roaming");
+    }
+    return os.path.join(appData, "jacup");
+}
+
+def resolveHome() -> dict[str, str] {
+    homeOverride = os.environ.get("JACUP_HOME");
+    if homeOverride {
+        rootDir: str = abspath(homeOverride);
+        return {"data_dir": rootDir, "config_dir": rootDir};
+    }
+    if TARGET_OS == "windows" {
+        return {"data_dir": windowsDataDir(), "config_dir": windowsConfigDir()};
+    }
+    dataBase = os.environ.get("XDG_DATA_HOME");
+    if not dataBase {
+        homeDir: str = os.environ.get("HOME", "");
+        if not homeDir {
+            raise JacupError("cannot locate the home directory; set JACUP_HOME explicitly");
+        }
+        dataBase = os.path.join(homeDir, ".local", "share");
+    }
+    configBase = os.environ.get("XDG_CONFIG_HOME");
+    if not configBase {
+        homeDir: str = os.environ.get("HOME", "");
+        if not homeDir {
+            raise JacupError("cannot locate the home directory; set JACUP_HOME explicitly");
+        }
+        configBase = os.path.join(homeDir, ".config");
+    }
+    return {
+        "data_dir": os.path.join(dataBase, "jacup"),
+        "config_dir": os.path.join(configBase, "jacup"),
+    };
+}
 
 glob VERSION: str = "0.1.2";
 
@@ -106,7 +163,7 @@ def requireNoPositional(tokens: list[str], cmd: str) -> None {
     }
 }
 
-def dispatch(home: JacupHome, cmd: str, tokens: list[str]) -> int {
+def dispatch(home: dict[str, str], cmd: str, tokens: list[str]) -> int {
     if cmd == "install" {
         parsed = parseIndexFlag(tokens);
         version: str = requireVersionToken(parsed.positional, cmd);
@@ -189,7 +246,7 @@ def dispatch(home: JacupHome, cmd: str, tokens: list[str]) -> int {
     if cmd == "unpin" {
         requireNoPositional(tokens, cmd);
         unpinProjectVersion(os.getcwd());
-        print(f"jacup: removed {os.path.join(os.path.abspath(os.getcwd()), '.jac-version')}");
+        print(f"jacup: removed {os.path.join(os.getcwd(), '.jac-version')}");
         return 0;
     }
     if cmd == "current" {
@@ -204,7 +261,7 @@ def dispatch(home: JacupHome, cmd: str, tokens: list[str]) -> int {
     }
     if cmd == "bin" {
         requireNoPositional(tokens, cmd);
-        print(home.binDir());
+        print(binDir(home));
         return 0;
     }
     if cmd == "exec" {
@@ -221,7 +278,7 @@ def dispatch(home: JacupHome, cmd: str, tokens: list[str]) -> int {
     raise JacupError(f"unknown command '{cmd}'; see 'jacup --help'");
 }
 
-def cmdList(home: JacupHome) -> int {
+def cmdList(home: dict[str, str]) -> int {
     names = installedVersions(home);
     if not names {
         print("no versions installed");
@@ -235,7 +292,7 @@ def cmdList(home: JacupHome) -> int {
     return 0;
 }
 
-def cmdAvailable(home: JacupHome, indexFlag: str | None) -> int {
+def cmdAvailable(home: dict[str, str], indexFlag: str | None) -> int {
     indexUrl: str = resolveIndexUrl(indexFlag, home);
     index = fetchIndex(indexUrl);
     target = currentTarget();
@@ -261,7 +318,7 @@ def cmdAvailable(home: JacupHome, indexFlag: str | None) -> int {
     return 0;
 }
 
-def cmdCurrent(home: JacupHome) -> int {
+def cmdCurrent(home: dict[str, str]) -> int {
     sel = resolveVersion(home, os.getcwd());
     binPath: str = installedPath(home, sel.version);
     print(f"version: {sel.version} ({sel.source})");
@@ -281,18 +338,18 @@ def latestReleaseVersion(indexUrl: str) -> str {
     return latest;
 }
 
-def printLauncherHint(home: JacupHome, shim: str | None) -> None {
+def printLauncherHint(home: dict[str, str], shim: str | None) -> None {
     if shim is None {
         sys.stderr.write(
-            f"jacup: could not create the 'jac' launcher link in {home.binDir()}; on Windows, "
+            f"jacup: could not create the 'jac' launcher link in {binDir(home)}; on Windows, "
             "enable Developer Mode or run as an administrator; until then run Jac via 'jacup exec --'\n"
         );
         return;
     }
-    print(f"jacup: '{shim}' runs the default Jac; add {home.binDir()} to PATH to use it as 'jac'");
+    print(f"jacup: '{shim}' runs the default Jac; add {binDir(home)} to PATH to use it as 'jac'");
 }
 
-def cmdUpdate(home: JacupHome, indexFlag: str | None) -> int {
+def cmdUpdate(home: dict[str, str], indexFlag: str | None) -> int {
     indexUrl: str = resolveIndexUrl(indexFlag, home);
     latest: str = latestReleaseVersion(indexUrl);
     cfg = loadConfig(home);
@@ -311,7 +368,7 @@ def cmdUpdate(home: JacupHome, indexFlag: str | None) -> int {
     return 0;
 }
 
-def cmdAliases(home: JacupHome) -> int {
+def cmdAliases(home: dict[str, str]) -> int {
     cfg = loadConfig(home);
     if not cfg.aliases {
         print("no aliases defined");
@@ -323,7 +380,7 @@ def cmdAliases(home: JacupHome) -> int {
     return 0;
 }
 
-def main(argv: list[str]) -> int {
+def runMain(argv: list[str]) -> int {
     if not argv {
         sys.stderr.write("jacup: no command given; here is how jacup works:\n\n");
         sys.stderr.write(USAGE);
@@ -343,20 +400,20 @@ def main(argv: list[str]) -> int {
         sys.stderr.write(f"jacup: error: unknown option '{cmd}'; see 'jacup --help'\n");
         return 2;
     }
-    home: JacupHome = resolveHome();
+    home: dict[str, str] = resolveHome();
     try {
         return dispatch(home, cmd, rest);
     } except JacupError as e {
-        sys.stderr.write(f"jacup: error: {str(e)}\n");
+        sys.stderr.write(f"jacup: error: {e.message}\n");
         return 2;
     } except KeyboardInterrupt {
         raise;
     } except Exception as e {
-        sys.stderr.write(f"jacup: error: unexpected failure: {type(e).__name__}: {str(e)}\n");
+        sys.stderr.write(f"jacup: error: unexpected failure: {type(e).__name__}: {e}\n");
         return 2;
     }
 }
 
 with entry:__main__ {
-    sys.exit(main(sys.argv[1:]));
+    sys.exit(runMain(sys.argv[1:]));
 }

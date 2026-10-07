@@ -6,14 +6,47 @@ point; 'install latest' and 'update' resolve the literal 'latest' through the
 release index (releases.latestVersionString) before any version is parsed.
 """
 
-import re;
 import from src.errors { JacupError }
 
-glob VERSION_PATTERN: str = (
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
-    r"(-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
-    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$"
-);
+def isDigit(ch: str) -> bool {
+    return ch >= "0" and ch <= "9";
+}
+
+def allDigits(text: str) -> bool {
+    if not text {
+        return False;
+    }
+    for ch in text {
+        if not isDigit(ch) {
+            return False;
+        }
+    }
+    return True;
+}
+
+def validNumericIdentifier(text: str) -> bool {
+    return allDigits(text) and (len(text) == 1 or not text.startswith("0"));
+}
+
+def validPrerelease(text: str) -> bool {
+    if not text {
+        return False;
+    }
+    for ident in text.split(".") {
+        if not ident {
+            return False;
+        }
+        for ch in ident {
+            if not isDigit(ch) and not (ch >= "A" and ch <= "Z") and not (ch >= "a" and ch <= "z") and ch != "-" {
+                return False;
+            }
+        }
+        if allDigits(ident) and not validNumericIdentifier(ident) {
+            return False;
+        }
+    }
+    return True;
+}
 
 obj Version {
     has major: int, minor: int, patch: int;
@@ -40,35 +73,30 @@ obj Version {
         return self.prerelease == "";
     }
 
-    def sortKey() -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]] {
-        parts: list[tuple[int, int, str]] = [];
-        for ident in self.prerelease.split(".") if self.prerelease else [] {
-            parts.append(Version.identifierKey(ident));
+    static def compareIdentifier(a: str, b: str) -> int {
+        aNumeric: bool = allDigits(a);
+        bNumeric: bool = allDigits(b);
+        if aNumeric and bNumeric {
+            ai: int = int(a);
+            bi: int = int(b);
+            if ai != bi { return -1 if ai < bi else 1; }
+            return 0;
         }
-        return (self.major, self.minor, self.patch, 1 if self.isRelease() else 0, tuple(parts));
-    }
-
-    static def identifierKey(ident: str) -> tuple[int, int, str] {
-        if ident.isdigit() {
-            return (0, int(ident), "");
+        if aNumeric != bNumeric {
+            return -1 if aNumeric else 1;
         }
-        return (1, 0, ident);
+        if a == b { return 0; }
+        return -1 if a < b else 1;
     }
 
     static def comparePrerelease(a: str, b: str) -> int {
-        left: list[tuple[int, int, str]] = [];
-        for ident in a.split(".") if a else [] {
-            left.append(Version.identifierKey(ident));
-        }
-        right: list[tuple[int, int, str]] = [];
-        for ident in b.split(".") if b else [] {
-            right.append(Version.identifierKey(ident));
-        }
+        left: list[str] = a.split(".") if a else [];
+        right: list[str] = b.split(".") if b else [];
         n: int = min(len(left), len(right));
         i: int = 0;
         while i < n {
-            if left[i] < right[i] { return -1; }
-            if left[i] > right[i] { return 1; }
+            cmp: int = Version.compareIdentifier(left[i], right[i]);
+            if cmp != 0 { return cmp; }
             i = i + 1;
         }
         if len(left) == len(right) { return 0; }
@@ -77,19 +105,46 @@ obj Version {
 }
 
 def parseVersion(text: str) -> Version {
-    m = re.fullmatch(VERSION_PATTERN, text);
-    if not m {
+    pieces: list[str] = text.split("-");
+    if len(pieces) > 2 {
         raise JacupError(
             f"invalid version '{text}': expected MAJOR.MINOR.PATCH with an optional "
             "-PRERELEASE suffix (e.g. 0.9.2, 1.0.0-rc.1); ranges, 'latest', and "
             "path-like values are not accepted"
         );
     }
-    major: int = int(m.group(1));
-    minor: int = int(m.group(2));
-    patch: int = int(m.group(3));
-    pre = m.group(5) or "";
-    return Version(major=major, minor=minor, patch=patch, prerelease=pre);
+    core: list[str] = pieces[0].split(".");
+    if len(core) != 3 {
+        raise JacupError(
+            f"invalid version '{text}': expected MAJOR.MINOR.PATCH with an optional "
+            "-PRERELEASE suffix (e.g. 0.9.2, 1.0.0-rc.1); ranges, 'latest', and "
+            "path-like values are not accepted"
+        );
+    }
+    if not validNumericIdentifier(core[0]) or not validNumericIdentifier(core[1]) or not validNumericIdentifier(core[2]) {
+        raise JacupError(
+            f"invalid version '{text}': expected MAJOR.MINOR.PATCH with an optional "
+            "-PRERELEASE suffix (e.g. 0.9.2, 1.0.0-rc.1); ranges, 'latest', and "
+            "path-like values are not accepted"
+        );
+    }
+    prerelease: str = "";
+    if len(pieces) == 2 {
+        prerelease = pieces[1];
+        if not validPrerelease(prerelease) {
+            raise JacupError(
+                f"invalid version '{text}': expected MAJOR.MINOR.PATCH with an optional "
+                "-PRERELEASE suffix (e.g. 0.9.2, 1.0.0-rc.1); ranges, 'latest', and "
+                "path-like values are not accepted"
+            );
+        }
+    }
+    return Version(
+        major=int(core[0]),
+        minor=int(core[1]),
+        patch=int(core[2]),
+        prerelease=prerelease
+    );
 }
 
 def sortVersions(versions: list[Version]) -> list[Version] {
@@ -98,7 +153,7 @@ def sortVersions(versions: list[Version]) -> list[Version] {
     while i < len(result) {
         item = result[i];
         j: int = i - 1;
-        while j >= 0 and result[j].sortKey() > item.sortKey() {
+        while j >= 0 and result[j].compare(item) > 0 {
             result[j + 1] = result[j];
             j = j - 1;
         }

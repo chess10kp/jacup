@@ -4,10 +4,28 @@ import os;
 import sys;
 import from src.config { loadConfig, resolveIndexUrl }
 import from src.errors { JacupError }
-import from src.install { loadMetadata, installedVersions }
-import from src.paths { JacupHome, binaryName, isWindows }
+import from src.install { loadMetadata }
+import from src.installed { installedVersions }
+import from src.path_core {
+    binaryName,
+    configFile,
+    currentFile,
+    isWindows,
+    versionDir,
+}
 import from src.releases { fetchIndex, sha256File }
 import from src.selection { installedPath, resolveVersion }
+def doctorShellQuote(value: str) -> str {
+    result: str = "'";
+    for ch in value {
+        if ch == "'" {
+            result = result + "'\\''";
+        } else {
+            result = result + ch;
+        }
+    }
+    return result + "'";
+}
 import from src.semver { parseVersion }
 
 obj CheckResult {
@@ -22,7 +40,7 @@ def record(results: list[CheckResult], name: str, ok: bool, detail: str) -> None
     results.append(CheckResult(name=name, ok=ok, detail=detail));
 }
 
-def runDoctor(home: JacupHome, indexFlag: str | None) -> int {
+def runDoctor(home: dict[str, str], indexFlag: str | None) -> int {
     results: list[CheckResult] = [];
 
     checkDirectories(home, results);
@@ -47,13 +65,13 @@ def runDoctor(home: JacupHome, indexFlag: str | None) -> int {
     return 0;
 }
 
-def checkDirectories(home: JacupHome, results: list[CheckResult]) -> None {
+def checkDirectories(home: dict[str, str], results: list[CheckResult]) -> None {
     targets: list[DirCheck] = [
-        DirCheck(label="data home", path=home.data_dir),
-        DirCheck(label="config home", path=home.config_dir),
+        DirCheck(label="data home", path=home["data_dir"]),
+        DirCheck(label="config home", path=home["config_dir"]),
     ];
     for t in targets {
-        if os.path.isdir(t.path) and os.access(t.path, os.R_OK | os.W_OK | os.X_OK) {
+        if os.path.isdir(t.path) and os.system("test -r " + doctorShellQuote(t.path) + " && test -w " + doctorShellQuote(t.path) + " && test -x " + doctorShellQuote(t.path)) == 0 {
             record(results, f"{t.label} directory", True, f"{t.path} is readable and writable");
         } elif os.path.isdir(t.path) {
             record(
@@ -71,15 +89,15 @@ def checkDirectories(home: JacupHome, results: list[CheckResult]) -> None {
                     results,
                     f"{t.label} directory",
                     False,
-                    f"{t.path} does not exist and cannot be created ({str(e)}); check JACUP_HOME and permissions",
+                    f"{t.path} does not exist and cannot be created ({e}); check JACUP_HOME and permissions",
                 );
             }
         }
     }
 }
 
-def checkConfig(home: JacupHome, results: list[CheckResult]) -> None {
-    path: str = home.configFile();
+def checkConfig(home: dict[str, str], results: list[CheckResult]) -> None {
+    path: str = configFile(home);
     if not os.path.exists(path) {
         record(results, "config file", True, f"{path} not present; defaults in effect");
         return;
@@ -88,24 +106,24 @@ def checkConfig(home: JacupHome, results: list[CheckResult]) -> None {
         _ = loadConfig(home);
         record(results, "config file", True, f"{path} parsed");
     } except JacupError as e {
-        record(results, "config file", False, str(e));
+        record(results, "config file", False, e.message);
     }
 }
 
-def checkSelection(home: JacupHome, results: list[CheckResult]) -> None {
+def checkSelection(home: dict[str, str], results: list[CheckResult]) -> None {
     try {
         sel = resolveVersion(home, os.getcwd());
     } except JacupError as e {
-        record(results, "version selection", True, str(e));
+        record(results, "version selection", True, e.message);
         return;
     }
     try {
         binPath: str = installedPath(home, sel.version);
         record(results, "version selection", True, f"{sel.version} ({sel.source}) -> {binPath}");
     } except JacupError as e {
-        record(results, "version selection", False, str(e));
+        record(results, "version selection", False, e.message);
     }
-    pointer: str = home.currentFile();
+    pointer: str = currentFile(home);
     if not os.path.isfile(pointer) {
         return;
     }
@@ -132,14 +150,14 @@ def checkSelection(home: JacupHome, results: list[CheckResult]) -> None {
     }
 }
 
-def checkInstalled(home: JacupHome, results: list[CheckResult]) -> None {
+def checkInstalled(home: dict[str, str], results: list[CheckResult]) -> None {
     names = installedVersions(home);
     if not names {
         record(results, "installed versions", True, "no versions installed");
         return;
     }
     for name in names {
-        vdir: str = home.versionDir(name);
+        vdir: str = versionDir(home, name);
         try {
             parseVersion(name);
         } except JacupError {
@@ -154,7 +172,7 @@ def checkInstalled(home: JacupHome, results: list[CheckResult]) -> None {
         try {
             meta = loadMetadata(home, name);
         } except JacupError as e {
-            record(results, f"installed version {name}", False, str(e));
+            record(results, f"installed version {name}", False, e.message);
             continue;
         }
         binPath: str = os.path.join(vdir, binaryName());
@@ -168,17 +186,17 @@ def checkInstalled(home: JacupHome, results: list[CheckResult]) -> None {
             continue;
         }
         actual = sha256File(binPath);
-        if actual != meta.sha256 {
+        if actual != meta[3] {
             record(
                 results,
                 f"installed version {name}",
                 False,
-                f"checksum mismatch for {binPath}: metadata records {meta.sha256}, file hashes to {actual}; "
+                f"checksum mismatch for {binPath}: metadata records {meta[3]}, file hashes to {actual}; "
                 f"repair with 'jacup uninstall {name}' and 'jacup install {name}'",
             );
             continue;
         }
-        if not isWindows() and not os.access(binPath, os.X_OK) {
+        if not isWindows() and os.system("test -x " + doctorShellQuote(binPath)) != 0 {
             record(
                 results,
                 f"installed version {name}",
@@ -191,7 +209,7 @@ def checkInstalled(home: JacupHome, results: list[CheckResult]) -> None {
     }
 }
 
-def checkIndex(home: JacupHome, indexFlag: str | None, results: list[CheckResult]) -> None {
+def checkIndex(home: dict[str, str], indexFlag: str | None, results: list[CheckResult]) -> None {
     url = indexFlag;
     note: str = "configured via --index-url";
     if url is None {
@@ -218,6 +236,6 @@ def checkIndex(home: JacupHome, indexFlag: str | None, results: list[CheckResult
             f"{url} ({note}) reachable with {len(index.releases)} version(s)",
         );
     } except JacupError as e {
-        record(results, "release index", False, f"{str(e)}; verify the URL or pass a different --index-url");
+        record(results, "release index", False, f"{e.message}; verify the URL or pass a different --index-url");
     }
 }

@@ -7,6 +7,7 @@ import platform;
 import shutil;
 import tempfile;
 import from src.config { JacupConfig, loadConfig, resolveIndexUrl, saveConfig, validateAlias }
+import from src.completions { bashCompletions, zshCompletions }
 import from src.errors { JacupError }
 import from src.install { installVersion, loadMetadata, uninstallVersion }
 import from src.installed { installedVersions }
@@ -685,4 +686,19 @@ test "aliases validate resolve persist and drive the launcher link" {
         cleanupTmp(base);
         cleanupTmp(base + "-idx");
     }
+}
+
+test "completions register jacup and jac for both shells" {
+    bash = bashCompletions();
+    zsh = zshCompletions();
+    for token in ["install", "uninstall", "switch", "doctor", "completions"] {
+        assert token in bash, f"bash completion lists {token}";
+        assert token in zsh, f"zsh completion lists {token}";
+    }
+    assert "complete -F _jacup jacup" in bash, "bash registers jacup";
+    assert "complete -F _jac jac" in bash, "bash registers jac";
+    assert "compdef _jacup jacup" in zsh, "zsh registers jacup";
+    assert "compdef _jac jac" in zsh, "zsh registers jac";
+    assert 'bash zsh' in bash or "bash zsh" in bash, "completions offer shell choice";
+    assert "jacup list" in bash and "jacup list" in zsh, "versions complete from installed list";
 }

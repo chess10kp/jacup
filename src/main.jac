@@ -8,6 +8,7 @@ import os;
 import from os.path { abspath }
 import sys;
 import from src.config { loadConfig, resolveIndexUrl }
+import from src.completions { bashCompletions, zshCompletions }
 import from src.doctor { runDoctor }
 import from src.errors { JacupError }
 import from src.exec { execJac }
@@ -82,9 +83,9 @@ def resolveHome() -> dict[str, str] {
     };
 }
 
-glob VERSION: str = "0.1.2";
+glob VERSION: str = "0.1.3";
 
-glob USAGE: str = """jacup 0.1.2 - standalone Jac version manager
+glob USAGE: str = """jacup 0.1.3 - standalone Jac version manager
 
 usage: jacup <command> [args]
 
@@ -106,6 +107,11 @@ commands:
   bin                                           print the bin directory holding the 'jac' launcher
   exec -- <jac-args>                            run the selected jac binary with exact args
   doctor [--index-url <url>]                    check installation health
+  completions <bash|zsh>                        emit a shell completion script
+
+shell setup: add these to your ~/.bashrc or ~/.zshrc:
+  export PATH="$(jacup bin):$PATH"               makes the managed 'jac' your jac
+  source <(jacup completions bash)               zsh: source <(jacup completions zsh)
 
 versions are exact: MAJOR.MINOR.PATCH[-PRERELEASE] (e.g. 0.9.2, 1.0.0-rc.1);
 'install latest' and 'update' pick the newest release with a build for this platform.
@@ -274,6 +280,21 @@ def dispatch(home: dict[str, str], cmd: str, tokens: list[str]) -> int {
         parsed = parseIndexFlag(tokens);
         requireNoPositional(parsed.positional, cmd);
         return runDoctor(home, parsed.index_url);
+    }
+    if cmd == "completions" {
+        if len(tokens) != 1 {
+            raise JacupError("'completions' requires exactly one shell argument: bash or zsh; see 'jacup --help'");
+        }
+        shell: str = tokens[0];
+        if shell != "bash" and shell != "zsh" {
+            raise JacupError(f"unsupported shell '{shell}'; use 'jacup completions bash' or 'jacup completions zsh'");
+        }
+        if shell == "bash" {
+            print(bashCompletions());
+        } else {
+            print(zshCompletions());
+        }
+        return 0;
     }
     raise JacupError(f"unknown command '{cmd}'; see 'jacup --help'");
 }

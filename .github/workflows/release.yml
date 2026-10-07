@@ -12,10 +12,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: pip install jaclang==0.37.25
+      # The suite must run on the same toolchain the release is built with:
+      # the standalone jac release binary, not a PyPI snapshot.
+      - name: Install standalone jac 0.37.25
+        run: |
+          curl -sSfL -o /usr/local/bin/jac \
+            "https://github.com/jaseci-labs/jac/releases/download/v0.37.25/jac-0.37.25-linux-x86_64"
+          chmod +x /usr/local/bin/jac
+          jac --version
       - run: jac test tests/unit.jac
       - run: jac test tests/integration.jac
 
@@ -31,10 +35,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: pip install jaclang==0.37.25
+      - name: Install standalone jac 0.37.25
+        run: |
+          curl -sSfL -o /usr/local/bin/jac \
+            "https://github.com/jaseci-labs/jac/releases/download/v0.37.25/jac-0.37.25-${{ matrix.target }}"
+          chmod +x /usr/local/bin/jac
+          jac --version
       - run: bash scripts/build_binary.sh "${{ matrix.target }}" dist
       - name: Checksum
         run: |

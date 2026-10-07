@@ -1,7 +1,15 @@
 """Native path and build-target helpers."""
 
 import os;
+import time;
 import from src.target { TARGET_OS }
+
+def uniqueStamp() -> int {
+    # Sub-second timestamp for unique temp names. Kept in float math until the
+    # final cast: float * int lowers badly on some jaclang native toolchains.
+    now: float = time.time();
+    return int(now * 1000000.0);
+}
 
 def isWindows() -> bool {
     return TARGET_OS == "windows";

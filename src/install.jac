@@ -20,6 +20,7 @@ import from src.path_core {
     downloadsDir,
     isWindows,
     metadataPath,
+    uniqueStamp,
     versionDir,
 }
 import from src.releases {
@@ -44,7 +45,7 @@ def makeInstallDir(baseDir: str) -> str {
     while i < 1000 {
         candidate: str = os.path.join(
             baseDir,
-            f"install-{os.getpid()}-{int(time.time() * 1000000)}-{INSTALL_TMP_COUNTER + i}"
+            f"install-{os.getpid()}-{uniqueStamp()}-{INSTALL_TMP_COUNTER + i}"
         );
         try {
             os.makedirs(candidate);
@@ -135,7 +136,7 @@ def loadMetadata(home: dict[str, str], version: str) -> list[str] {
         }
     } except Exception as e {
         raise JacupError(
-            f"malformed metadata file {path}: {e}; repair by running "
+            f"malformed metadata file {path}: {str(e)}; repair by running "
             f"'jacup uninstall {version}' and 'jacup install {version}'"
         );
     }
@@ -210,7 +211,7 @@ def downloadAndStage(home: dict[str, str], version: str, vdir: str, artifact: Ar
     try {
         work: str = makeInstallDir(downloadsDir(home));
     } except OSError as e {
-        raise JacupError(f"cannot create a temporary download directory in {downloadsDir(home)}: {e}");
+        raise JacupError(f"cannot create a temporary download directory in {downloadsDir(home)}: {str(e)}");
     }
     staging: str = os.path.join(work, version);
     os.makedirs(staging);
@@ -286,7 +287,7 @@ def uninstallVersion(home: dict[str, str], version: str) -> None {
     try {
         removeTree(vdir);
     } except OSError as e {
-        raise JacupError(f"failed to remove {vdir}: {e}");
+        raise JacupError(f"failed to remove {vdir}: {str(e)}");
     }
     pointer: str = currentFile(home);
     if os.path.isfile(pointer) {

@@ -425,12 +425,12 @@ def runMain(argv: list[str]) -> int {
     try {
         return dispatch(home, cmd, rest);
     } except JacupError as e {
-        sys.stderr.write(f"jacup: error: {e.message}\n");
+        sys.stderr.write(f"jacup: error: {str(e)}\n");
         return 2;
     } except KeyboardInterrupt {
         raise;
     } except Exception as e {
-        sys.stderr.write(f"jacup: error: unexpected failure: {type(e).__name__}: {e}\n");
+        sys.stderr.write(f"jacup: error: unexpected failure: {type(e).__name__}: {str(e)}\n");
         return 2;
     }
 }

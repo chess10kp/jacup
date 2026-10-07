@@ -163,7 +163,7 @@ def validConfigJson(raw: str, path: str) -> None {
         json.loads(raw);
     } except Exception as e {
         raise JacupError(
-            f"malformed config file {path}: {e}; fix the JSON or remove the file and run "
+            f"malformed config file {path}: {str(e)}; fix the JSON or remove the file and run "
             "'jacup use <version>' to recreate it"
         );
     }
@@ -183,7 +183,7 @@ def loadConfig(home: dict[str, str]) -> JacupConfig {
         }
     } except Exception as e {
         raise JacupError(
-            f"malformed config file {path}: {e}; fix the JSON or remove the file and run "
+            f"malformed config file {path}: {str(e)}; fix the JSON or remove the file and run "
             "'jacup use <version>' to recreate it"
         );
     }

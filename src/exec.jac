@@ -35,7 +35,7 @@ def execJac(home: dict[str, str], jacArgs: list[str]) -> int {
         sys.stderr.flush();
         result: int = os.system(command);
     } except OSError as e {
-        raise JacupError(f"failed to launch Jac {sel.version} ({binPath}): {e}");
+        raise JacupError(f"failed to launch Jac {sel.version} ({binPath}): {str(e)}");
     }
     return int(result / 256) if result >= 0 else 2;
 }

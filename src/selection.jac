@@ -79,7 +79,7 @@ def readPinFile(path: str) -> str {
             rf.close();
         }
     } except Exception as e {
-        raise JacupError(f"cannot read pin file {path}: {e}; fix or remove the file ('jacup unpin' removes it from its directory)");
+        raise JacupError(f"cannot read pin file {path}: {str(e)}; fix or remove the file ('jacup unpin' removes it from its directory)");
     }
     content: str = raw;
     if content.endswith("\n") {
@@ -213,6 +213,6 @@ def unpinProjectVersion(directory: str) -> None {
     try {
         os.unlink(path);
     } except OSError as e {
-        raise JacupError(f"failed to remove {path}: {e}");
+        raise JacupError(f"failed to remove {path}: {str(e)}");
     }
 }

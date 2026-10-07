@@ -20,6 +20,7 @@ import sys;
 import time;
 import from src.errors { JacupError }
 import from src.net { fetchBytes }
+import from src.path_core { uniqueStamp }
 import from src.semver { parseVersion, sortVersionStrings }
 import from src.target { TARGET_ARCH, TARGET_OS }
 def checksumShellQuote(value: str) -> str {
@@ -146,7 +147,7 @@ def decodeIndex(text: str, source: str) -> ReleaseIndex {
     try {
         data = json.loads(text);
     } except Exception as e {
-        raise JacupError(f"malformed release index {source}: invalid JSON ({e})");
+        raise JacupError(f"malformed release index {source}: invalid JSON ({str(e)})");
     }
     rootObj = requireObject(data, "root");
     versionsNode = rootObj.get("versions");
@@ -241,7 +242,7 @@ def fetchIndexText(url: str) -> str {
     } except JacupError {
         raise;
     } except Exception as e {
-        raise JacupError(f"failed to fetch release index {url}: {e}");
+        raise JacupError(f"failed to fetch release index {url}: {str(e)}");
     }
 }
 
@@ -311,7 +312,7 @@ def latestVersionString(index: ReleaseIndex, target: Target) -> str | None {
 def sha256File(path: str) -> str {
     outputPath: str = os.path.join(
         "/tmp",
-        f"jacup-sha-{os.getpid()}-{int(time.time() * 1000000)}"
+        f"jacup-sha-{os.getpid()}-{uniqueStamp()}"
     );
     tool: str = "sha256sum" if TARGET_OS == "linux" else "shasum -a 256";
     command: str = tool + " " + checksumShellQuote(path) + " > " + checksumShellQuote(outputPath);
@@ -361,6 +362,6 @@ def downloadTo(url: str, destPath: str) -> None {
     } except JacupError {
         raise;
     } except Exception as e {
-        raise JacupError(f"failed to download {url}: {e}");
+        raise JacupError(f"failed to download {url}: {str(e)}");
     }
 }

@@ -89,7 +89,7 @@ def checkDirectories(home: dict[str, str], results: list[CheckResult]) -> None {
                     results,
                     f"{t.label} directory",
                     False,
-                    f"{t.path} does not exist and cannot be created ({e}); check JACUP_HOME and permissions",
+                    f"{t.path} does not exist and cannot be created ({str(e)}); check JACUP_HOME and permissions",
                 );
             }
         }
@@ -106,7 +106,7 @@ def checkConfig(home: dict[str, str], results: list[CheckResult]) -> None {
         _ = loadConfig(home);
         record(results, "config file", True, f"{path} parsed");
     } except JacupError as e {
-        record(results, "config file", False, e.message);
+        record(results, "config file", False, str(e));
     }
 }
 
@@ -114,14 +114,14 @@ def checkSelection(home: dict[str, str], results: list[CheckResult]) -> None {
     try {
         sel = resolveVersion(home, os.getcwd());
     } except JacupError as e {
-        record(results, "version selection", True, e.message);
+        record(results, "version selection", True, str(e));
         return;
     }
     try {
         binPath: str = installedPath(home, sel.version);
         record(results, "version selection", True, f"{sel.version} ({sel.source}) -> {binPath}");
     } except JacupError as e {
-        record(results, "version selection", False, e.message);
+        record(results, "version selection", False, str(e));
     }
     pointer: str = currentFile(home);
     if not os.path.isfile(pointer) {
@@ -172,7 +172,7 @@ def checkInstalled(home: dict[str, str], results: list[CheckResult]) -> None {
         try {
             meta = loadMetadata(home, name);
         } except JacupError as e {
-            record(results, f"installed version {name}", False, e.message);
+            record(results, f"installed version {name}", False, str(e));
             continue;
         }
         binPath: str = os.path.join(vdir, binaryName());
@@ -236,6 +236,6 @@ def checkIndex(home: dict[str, str], indexFlag: str | None, results: list[CheckR
             f"{url} ({note}) reachable with {len(index.releases)} version(s)",
         );
     } except JacupError as e {
-        record(results, "release index", False, f"{e.message}; verify the URL or pass a different --index-url");
+        record(results, "release index", False, f"{str(e)}; verify the URL or pass a different --index-url");
     }
 }

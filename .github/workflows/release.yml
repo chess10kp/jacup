@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install jaclang
+      - run: pip install jaclang==0.37.25
       - run: jac test tests/unit.jac
       - run: jac test tests/integration.jac
 
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install jaclang
+      - run: pip install jaclang==0.37.25
       - run: bash scripts/build_binary.sh "${{ matrix.target }}" dist
       - name: Checksum
         run: |

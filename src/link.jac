@@ -46,7 +46,7 @@ def linkActiveJac(home: dict[str, str], version: str) -> str | None {
         if isWindows() {
             return None;
         }
-        raise JacupError(f"cannot create the 'jac' launcher link {shim} -> {target}: {e}");
+        raise JacupError(f"cannot create the 'jac' launcher link {shim} -> {target}: {str(e)}");
     }
     return shim;
 }

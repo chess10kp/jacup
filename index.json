@@ -47,6 +47,29 @@
       ]
     },
     {
+      "version": "0.34.23",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.23/jac-0.34.23-linux-x86_64",
+          "sha256": "bb93ea1920b776592af2e38f6cd0cb1db1f71c7afdadf7ba841210b645212ce6"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.23/jac-0.34.23-linux-aarch64",
+          "sha256": "0e4ada659c89b8be572203109203c84e0b799f5dfcf409be5f4b404da070cfbf"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.23/jac-0.34.23-macos-aarch64",
+          "sha256": "ddbf84d4f2dbb52d64909dd272dbd403b72232d95e7ac889be56789fcd2d19a0"
+        }
+      ]
+    },
+    {
       "version": "0.34.22",
       "artifacts": [
         {
@@ -89,29 +112,6 @@
           "arch": "aarch64",
           "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.21/jac-0.34.21-macos-aarch64",
           "sha256": "5ad15337c33f180fdfcb9afdea311fc1938587974e063584ede27abe65914a62"
-        }
-      ]
-    },
-    {
-      "version": "0.34.20",
-      "artifacts": [
-        {
-          "os": "linux",
-          "arch": "x86_64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.20/jac-0.34.20-linux-x86_64",
-          "sha256": "3d9f166c6c40a379d1b3d690448891c1971f07658dc52e34e8926a77670462dd"
-        },
-        {
-          "os": "linux",
-          "arch": "aarch64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.20/jac-0.34.20-linux-aarch64",
-          "sha256": "e7436d156ef29a20aaf652599489e5ab861ed0c9b30fc7e21f738a289ae21d32"
-        },
-        {
-          "os": "macos",
-          "arch": "aarch64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.20/jac-0.34.20-macos-aarch64",
-          "sha256": "f1f152d914dac278d22e78cbd9de9459ed2756eb8d96aae257542d032c8cfdce"
         }
       ]
     }

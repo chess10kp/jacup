@@ -24,25 +24,25 @@
       ]
     },
     {
-      "version": "0.37.23",
+      "version": "0.34.24",
       "artifacts": [
         {
           "os": "linux",
           "arch": "x86_64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.23/jac-0.37.23-linux-x86_64",
-          "sha256": "2c3c697616b08516caf01704571e7e7020f4b294cd2bef7f04e8ef1ceec9d6ad"
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.24/jac-0.34.24-linux-x86_64",
+          "sha256": "899724ca5d4e0c9433ce2cf1bccb09e73a3bb272ca6a2f14534639282b3ca152"
         },
         {
           "os": "linux",
           "arch": "aarch64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.23/jac-0.37.23-linux-aarch64",
-          "sha256": "a3d134beb520513677978051044400d3f5de0a644eb6b4f0b6330397586915c3"
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.24/jac-0.34.24-linux-aarch64",
+          "sha256": "9e1470ba7aaeb870fdf10070fa785e456491d7ffd50ff67ed49b31f0381a8720"
         },
         {
           "os": "macos",
           "arch": "aarch64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.37.23/jac-0.37.23-macos-aarch64",
-          "sha256": "76515787ec7707a8266890449fd43196df37ab1c415ba346bc1d63f10db24014"
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.34.24/jac-0.34.24-macos-aarch64",
+          "sha256": "e55f641d40d7a97234499f75305b6b75f8ecb8bc06fb038d02daf4f7cb8d23c9"
         }
       ]
     },

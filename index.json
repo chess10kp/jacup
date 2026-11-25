@@ -1,6 +1,29 @@
 {
   "versions": [
     {
+      "version": "0.40.2",
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.40.2/jac-0.40.2-linux-x86_64",
+          "sha256": "b854bbf46b154428461fe4ce66ea5d9648ff1796162ef837b8aa753f676a63ba"
+        },
+        {
+          "os": "linux",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.40.2/jac-0.40.2-linux-aarch64",
+          "sha256": "462b50e840f1691b35dece3a365e2ad93ea8d0ca7cc702e2eae1dfcab5ee0bcc"
+        },
+        {
+          "os": "macos",
+          "arch": "aarch64",
+          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.40.2/jac-0.40.2-macos-aarch64",
+          "sha256": "7f9d6d8b0418ee22dfd14f8600d5fffad0184396abfc86f8491332b97f264052"
+        }
+      ]
+    },
+    {
       "version": "0.40.1",
       "artifacts": [
         {
@@ -89,29 +112,6 @@
           "arch": "aarch64",
           "url": "https://github.com/jaseci-labs/jac/releases/download/v0.39.1/jac-0.39.1-macos-aarch64",
           "sha256": "28d5b08777d412b7a163d0dc9e66099f2b98a2e023145b8993694b64673497c4"
-        }
-      ]
-    },
-    {
-      "version": "0.39.0",
-      "artifacts": [
-        {
-          "os": "linux",
-          "arch": "x86_64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.39.0/jac-0.39.0-linux-x86_64",
-          "sha256": "a4b2c4ae2aa4a34b5173d951a15cdd313a29e074024ed96d148be5f671f626c1"
-        },
-        {
-          "os": "linux",
-          "arch": "aarch64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.39.0/jac-0.39.0-linux-aarch64",
-          "sha256": "a45b9e0d756a1469fba2520277eabd1b1d05bbf5faffd053eacd5be1b4b7f40f"
-        },
-        {
-          "os": "macos",
-          "arch": "aarch64",
-          "url": "https://github.com/jaseci-labs/jac/releases/download/v0.39.0/jac-0.39.0-macos-aarch64",
-          "sha256": "e505eb684c9448b4a9cc4cf58203a311d15f6abb888a26db6251634f25c7c70d"
         }
       ]
     }
